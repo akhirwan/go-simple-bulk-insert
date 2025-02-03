@@ -23,12 +23,9 @@ func NewCounterFeature(counterRepo repository.CounterRepository) CounterFeature 
 }
 
 func (f counterFeature) CreateFeature(ctx context.Context, req *model.CreateRequest) (code int, message string) {
-	tx := f.CounterRepo.BeginTransaction(ctx)
-
 	log.Println("getting number counter...")
-	counter, err := f.CounterRepo.GetCounter(tx, req)
+	counter, err := f.CounterRepo.GetCounter(req)
 	if err != nil {
-		tx.Rollback()
 		log.Println("invalid type :", err.Error())
 
 		return http.StatusBadRequest, "invalid type"
@@ -41,6 +38,8 @@ func (f counterFeature) CreateFeature(ctx context.Context, req *model.CreateRequ
 		currentNumber = *lastNumber + 1
 	}
 
+	var transactions []*model.TestNumberTransaction
+
 	log.Printf("inserting %v numbers...", req.Total)
 	for i := 0; i < req.Total; i++ {
 		transaction := model.TestNumberTransaction{
@@ -48,26 +47,26 @@ func (f counterFeature) CreateFeature(ctx context.Context, req *model.CreateRequ
 			Action: req.Action,
 		}
 
-		if err = f.CounterRepo.BulkInsertTransaction(tx, transaction); err != nil {
-			tx.Rollback()
-			log.Println("failed to insert transactions :", err.Error())
+		transactions = append(transactions, &transaction)
+	}
 
-			return http.StatusBadGateway, "failed to insert transactions"
-		}
+	if err = f.CounterRepo.BulkInsertTransaction(transactions); err != nil {
+		log.Println("failed to insert transactions :", err.Error())
+
+		return http.StatusBadGateway, "failed to insert transactions"
 	}
 	log.Printf("inserted %v numbers", req.Total)
 
 	newLastNumber := currentNumber + req.Total - 1
 	log.Printf("updating last number to %v", newLastNumber)
-	if err = f.CounterRepo.UpdateCounter(tx, &newLastNumber, &counter); err != nil {
-		tx.Rollback()
+	if err = f.CounterRepo.UpdateCounter(&newLastNumber, &counter); err != nil {
 		log.Println("failed to update counter :", err.Error())
 
 		return http.StatusBadGateway, "failed to update counter"
 	}
 	log.Printf("updated last number to %v", newLastNumber)
 
-	tx.Commit()
+	f.CounterRepo.CommitTX()
 
 	return http.StatusOK, "Data inserted"
 }
