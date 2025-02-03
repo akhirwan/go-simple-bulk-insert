@@ -58,7 +58,7 @@ func (r *counterRepository) BulkInsertTransaction(transactions []*model.TestNumb
 	for err = range ch {
 		if err != nil {
 			r.TX.Rollback()
-			err = fmt.Errorf("[FATAL] S/4 Hana Sales insert query error: %s", err.Error()) // return from func not for loop
+			err = fmt.Errorf("insert query error: %s", err.Error()) // return from func not for loop
 			return
 		}
 	}
